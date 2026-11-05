@@ -7530,7 +7530,9 @@
   "readListUpdating": "更新中 · 上次结果",
   "readListOffline": "离线 · 上次结果",
   "readListFailed": "未更新 · 上次结果",
-  "remoteStartupSection": "启动",
+  "remoteConnectionSection": "连接",
+  "remoteRetainConnections": "切换主机时保持 SSH 连接",
+  "remoteRetainConnectionsHint": "App 在前台时保留已连接的 SSH 主机；进入后台 5 分钟后断开未使用的连接，正在进行的文件传输会先完成。",
   "remoteAutoConnectOnStartup": "连接上次使用的主机",
   "remoteAutoConnectOnStartupHint": "关闭后从本机开始",
   "remoteStepConnect": "连接服务器",
@@ -8633,6 +8635,7 @@
     }
   },
   "searchApiKey": "API Key",
+  "searchKwRetainSsh": "SSH,连接,保留,切换,前台,后台,五分钟",
   "searchNeedsLocal": "连接本机时可用",
   "searchNeedsPhoneControl": "开启手机操控后可用",
   "searchNeedsNativeUi": "原生界面可用",

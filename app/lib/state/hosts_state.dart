@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../remote/link_status.dart';
 import '../remote/relay/dsh_remote_backend.dart';
 import 'app_info.dart';
+import 'connection_state.dart' show hostLinkProvider;
 import '../remote/relay/relay_backend.dart';
 import '../remote/relay/webrtc_peer.dart';
 import '../remote/secret_store.dart';
@@ -156,15 +157,33 @@ class HostsController extends Notifier<HostsState> {
   Future<bool> saveSsh(SshHostConfig config, {SshSecrets? secrets}) async {
     await _loaded;
     ref.read(readListCredentialEpochProvider.notifier).advance();
-    if (secrets != null) await _writeSecrets(config, secrets);
-    final hosts = [...state.ssh];
-    final index = hosts.indexWhere((h) => h.id == config.id);
-    if (index >= 0) {
-      hosts[index] = config;
-    } else {
-      hosts.add(config);
+    var retireConnection = false;
+    try {
+      if (secrets != null) {
+        final changed = switch (config.auth) {
+          SshAuthMethod.password =>
+            (await _secrets.read(SshSecrets.passwordKey(config.id)) ?? '') != (secrets.password ?? ''),
+          SshAuthMethod.privateKey =>
+            (await _secrets.read(SshSecrets.privateKeyKey(config.id)) ?? '').trim() !=
+                    (secrets.privateKey ?? '').trim() ||
+                (await _secrets.read(SshSecrets.passphraseKey(config.id)) ?? '') != (secrets.passphrase ?? ''),
+        };
+        retireConnection = true;
+        await _writeSecrets(config, secrets);
+        retireConnection = changed;
+      }
+      final hosts = [...state.ssh];
+      final index = hosts.indexWhere((h) => h.id == config.id);
+      if (index >= 0) {
+        hosts[index] = config;
+      } else {
+        hosts.add(config);
+      }
+      return await _persist(hosts);
+    } finally {
+      // A partially written secret must not leave an authenticated old link retained.
+      if (retireConnection && ref.mounted) ref.container.invalidate(hostLinkProvider(HostRef.ssh(config.id)));
     }
-    return _persist(hosts);
   }
 
   Future<void> _writeSecrets(SshHostConfig config, SshSecrets secrets) async {

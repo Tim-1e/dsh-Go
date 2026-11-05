@@ -11,6 +11,7 @@ import '../../runtime/runtime_state.dart';
 import '../../state/app_info.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../../state/settings_state.dart';
 import '../common/app_dialog.dart';
 import '../common/ask_ai.dart';
 import '../common/overview_card.dart';
@@ -132,7 +133,7 @@ class RemoteScreen extends ConsumerWidget {
         // Only meaningful once there is a host to come back to.
         if (ssh.isNotEmpty || signedIn)
           SettingsSection(
-            title: l10n.remoteStartupSection,
+            title: l10n.remoteConnectionSection,
             children: [
               SettingsSwitchTile(
                 key: const ValueKey('remote-auto-connect'),
@@ -140,6 +141,13 @@ class RemoteScreen extends ConsumerWidget {
                 subtitle: l10n.remoteAutoConnectOnStartupHint,
                 value: ref.watch(remoteAutoConnectProvider),
                 onChanged: (value) => unawaited(ref.read(remoteAutoConnectProvider.notifier).set(value)),
+              ),
+              SettingsSwitchTile(
+                key: const ValueKey('remote-retain-ssh-connections'),
+                spot: Spots.retainSshConnections,
+                subtitle: l10n.remoteRetainConnectionsHint,
+                value: ref.watch(settingsProvider.select((s) => s.retainSshConnections)),
+                onChanged: (value) => unawaited(ref.read(settingsProvider.notifier).setRetainSshConnections(value)),
               ),
             ],
           ),

@@ -22,6 +22,7 @@ import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../shell/golden_harness.dart';
 import 'support/fake_relay.dart';
@@ -86,7 +87,19 @@ List<Override> _remote({
 ];
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   goldenBoth('remote_signed_in', () => const RemoteScreen(), overrides: _remote);
+
+  goldenBoth(
+    'remote_connection_preferences',
+    () => const RemoteScreen(),
+    overrides: _remote,
+    before: (tester) async {
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('remote-retain-ssh-connections')), 300);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   goldenBoth(
     'remote_signed_out',

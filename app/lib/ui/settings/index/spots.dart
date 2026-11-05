@@ -981,6 +981,12 @@ abstract final class Spots {
     title: (l) => l.remoteAutoConnectOnStartup,
     keywords: (l) => l.searchKwRemoteAutoConnect,
   );
+  static final retainSshConnections = SettingSpot(
+    'remote-retain-ssh-connections',
+    page: SettingsPageId.remote,
+    title: (l) => l.remoteRetainConnections,
+    keywords: (l) => l.searchKwRetainSsh,
+  );
 
   // 引擎参数 and its pages (drawn from the engine's schema).
   static final subagentDepth = SettingSpot(
@@ -1102,6 +1108,7 @@ final _rows = <SettingSpot>[
   Spots.engineUninstall,
   Spots.addSshHost,
   Spots.remoteAutoConnect,
+  Spots.retainSshConnections,
   Spots.subagentDepth,
   Spots.parallelCalls,
   Spots.commandTimeout,

@@ -43,7 +43,7 @@ class SessionLogExporter {
   Future<void> share(String sessionId) async {
     final conn = connection;
     if (conn == null) throw const DshTransportException('offline');
-    final bytes = await conn.client.exportSessionLog(sessionId);
+    final bytes = await conn.whileInUse(() => conn.client.exportSessionLog(sessionId));
     final name = sessionLogZipName(sessionId);
     await _share(
       ShareParams(
@@ -57,7 +57,7 @@ class SessionLogExporter {
   Future<String> saveToDownloads(String sessionId) async {
     final conn = connection;
     if (conn == null) throw const DshTransportException('offline');
-    final bytes = await conn.client.exportSessionLog(sessionId);
+    final bytes = await conn.whileInUse(() => conn.client.exportSessionLog(sessionId));
     final root = await _cacheRoot();
     final exports = await Directory('${root.path}/exports').create(recursive: true);
     // The page can be closed and reopened while the native worker still reads

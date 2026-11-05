@@ -12664,7 +12664,14 @@ class L10nEn extends L10n {
   String get readListFailed => 'Not updated · previous results';
 
   @override
-  String get remoteStartupSection => 'On launch';
+  String get remoteConnectionSection => 'Connections';
+
+  @override
+  String get remoteRetainConnections => 'Keep SSH connections when switching hosts';
+
+  @override
+  String get remoteRetainConnectionsHint =>
+      'Keeps connected SSH hosts while the app is in the foreground. After 5 minutes in the background, unused connections close once any file transfer finishes.';
 
   @override
   String get remoteAutoConnectOnStartup => 'Connect to the last host';
@@ -14322,6 +14329,9 @@ class L10nEn extends L10n {
 
   @override
   String get searchApiKey => 'API Key';
+
+  @override
+  String get searchKwRetainSsh => 'SSH,connection,retain,switch,foreground,background,five minutes';
 
   @override
   String get searchNeedsLocal => 'Available on this phone\'s engine';

@@ -1,5 +1,7 @@
 {
-  "remoteStartupSection": "On launch",
+  "remoteConnectionSection": "Connections",
+  "remoteRetainConnections": "Keep SSH connections when switching hosts",
+  "remoteRetainConnectionsHint": "Keeps connected SSH hosts while the app is in the foreground. After 5 minutes in the background, unused connections close once any file transfer finishes.",
   "remoteAutoConnectOnStartup": "Connect to the last host",
   "remoteAutoConnectOnStartupHint": "When off, start on this phone",
   "remoteStepConnect": "Connect to server",

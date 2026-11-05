@@ -59,6 +59,8 @@ It's in Settings too:
 
 On launch, the app reconnects to the host you used last. To start on this phone every time, turn off **Connect to the last host** on the remote hosts page; saved hosts stay, and you can connect to them by hand any time.
 
+If you switch between SSH hosts often, enable **Keep SSH connections when switching hosts** on the same page (off by default). While the app is open, it keeps SSH hosts you have already connected to, without connecting other saved hosts. After 5 minutes in the background, unused connections are released once file transfers finish. Connections still in use and the local engine are unaffected by this cleanup. Turning the option off releases unused connections. Android may still terminate the app in the background; reopening it reconnects as needed. The DSH Remote server still limits each device to one host connection; this option does not change that restriction.
+
 ## Add an SSH host
 
 The host needs SSH enabled and DSH installed (`npm i -g @deepseek-ai/dsh`).

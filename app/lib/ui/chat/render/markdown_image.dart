@@ -17,6 +17,7 @@ import '../../../l10n/l10n.dart';
 import '../../../state/artifact_files.dart';
 import '../../../state/artifacts.dart';
 import '../../../state/chat_state.dart';
+import '../../../state/connection_state.dart';
 import '../../../state/sessions_state.dart';
 import '../../../media/gallery.dart' show imageProviderBytes;
 import '../../theme/app_icons.dart';
@@ -264,15 +265,15 @@ class CachedImageReader implements WorkspaceImageReader {
 /// `/api/…` assets: they need the session's cookie, which NetworkImage can't
 /// send. [path] is the image's full URL or root-relative API path.
 class EngineImageReader implements WorkspaceImageReader {
-  const EngineImageReader(this.client);
+  const EngineImageReader(this.connection);
 
-  final DshClient? client;
+  final HostConnection? connection;
 
   @override
   Future<LoadedImage> read(String sessionId, String path) async {
-    final client = this.client;
-    if (client == null) throw const ArtifactError('offline');
-    final bytes = await client.readEngineUrl(path, maxBytes: maxMarkdownImageBytes);
+    final conn = connection;
+    if (conn == null) throw const ArtifactError('offline');
+    final bytes = await conn.whileInUse(() => conn.client.readEngineUrl(path, maxBytes: maxMarkdownImageBytes));
     return isSvgUrl(path) ? SvgImageBytes(bytes) : RasterImage(MemoryImage(bytes));
   }
 }
@@ -286,11 +287,11 @@ const maxHeldEngineImageBytes = 256 * 1024;
 /// 8 MiB of bytes.
 final engineImageReaderProvider = Provider<CachedImageReader>(
   (ref) => CachedImageReader(
-    EngineImageReader(ref.watch(artifactFilesProvider).connection?.client),
+    EngineImageReader(ref.watch(artifactFilesProvider).connection),
     capacity: 32,
     keeps: (image) => switch (image) {
-      RasterImage(provider: MemoryImage(:final bytes)) || SvgImageBytes(:final bytes) =>
-        bytes.length <= maxHeldEngineImageBytes,
+      RasterImage(provider: MemoryImage(:final bytes)) ||
+      SvgImageBytes(:final bytes) => bytes.length <= maxHeldEngineImageBytes,
       _ => true,
     },
   ),

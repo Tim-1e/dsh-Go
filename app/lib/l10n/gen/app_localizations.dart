@@ -22100,11 +22100,23 @@ abstract class L10n {
   /// **'未更新 · 上次结果'**
   String get readListFailed;
 
-  /// No description provided for @remoteStartupSection.
+  /// No description provided for @remoteConnectionSection.
   ///
   /// In zh, this message translates to:
-  /// **'启动'**
-  String get remoteStartupSection;
+  /// **'连接'**
+  String get remoteConnectionSection;
+
+  /// No description provided for @remoteRetainConnections.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换主机时保持 SSH 连接'**
+  String get remoteRetainConnections;
+
+  /// No description provided for @remoteRetainConnectionsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'App 在前台时保留已连接的 SSH 主机；进入后台 5 分钟后断开未使用的连接，正在进行的文件传输会先完成。'**
+  String get remoteRetainConnectionsHint;
 
   /// No description provided for @remoteAutoConnectOnStartup.
   ///
@@ -24883,6 +24895,12 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'API Key'**
   String get searchApiKey;
+
+  /// No description provided for @searchKwRetainSsh.
+  ///
+  /// In zh, this message translates to:
+  /// **'SSH,连接,保留,切换,前台,后台,五分钟'**
+  String get searchKwRetainSsh;
 
   /// No description provided for @searchNeedsLocal.
   ///

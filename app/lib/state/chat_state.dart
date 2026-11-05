@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../diagnostics/app_error_log.dart';
 import '../l10n/l10n.dart';
@@ -1265,7 +1266,9 @@ class ChatController extends Notifier<ChatState> {
       clearError: !state.streamLost,
       clearNotice: true,
     );
+    KeepAliveLink? connectionHold;
     try {
+      connectionHold = ref.read(activeConnectionProvider).value?.keepAlive?.call();
       final receipts = await _stageFiles(operation, attachments);
       if (!_currentOperation(operation)) return false;
       var promptMode = effective == SendMode.steer ? PromptMode.steer : PromptMode.queue;
@@ -1310,6 +1313,8 @@ class ChatController extends Notifier<ChatState> {
       _pending = List.unmodifiable(_pending.where((p) => p.requestId != requestId));
       state = state.copyWith(pending: _placePending(), error: _sendFailure(e));
       return false;
+    } finally {
+      connectionHold?.close();
     }
   }
 

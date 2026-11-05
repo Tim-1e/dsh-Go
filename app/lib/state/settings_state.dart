@@ -17,6 +17,7 @@ class AppSettings {
     this.themeMode = ThemeMode.system,
     this.autoStartLocal = true,
     this.autoStartLocalExplicit = true,
+    this.retainSshConnections = false,
     this.autoApproveCommands = false,
     this.phoneStorage = false,
     this.webPhoneLayout = true,
@@ -36,6 +37,9 @@ class AppSettings {
 
   /// A stored user choice. Policy defaults never create this preference.
   final bool autoStartLocalExplicit;
+
+  /// Reuse connected SSH hosts while foregrounded, with a background grace period.
+  final bool retainSshConnections;
 
   /// New local sessions use DSH's `danger-full-access` preset (commands run without asking).
   /// Off by default: there is no sandbox on Android, so each command escalation asks first.
@@ -80,6 +84,7 @@ class AppSettings {
     ThemeMode? themeMode,
     bool? autoStartLocal,
     bool? autoStartLocalExplicit,
+    bool? retainSshConnections,
     bool? autoApproveCommands,
     bool? phoneStorage,
     bool? webPhoneLayout,
@@ -94,6 +99,7 @@ class AppSettings {
     themeMode: themeMode ?? this.themeMode,
     autoStartLocal: autoStartLocal ?? this.autoStartLocal,
     autoStartLocalExplicit: autoStartLocalExplicit ?? this.autoStartLocalExplicit,
+    retainSshConnections: retainSshConnections ?? this.retainSshConnections,
     autoApproveCommands: autoApproveCommands ?? this.autoApproveCommands,
     phoneStorage: phoneStorage ?? this.phoneStorage,
     webPhoneLayout: webPhoneLayout ?? this.webPhoneLayout,
@@ -118,6 +124,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _apiKeyKey = 'deepseek_api_key';
   static const _themeKey = 'theme_mode';
   static const _autoStartKey = 'auto_start_local';
+  static const _retainSshKey = 'retain_ssh_connections';
   static const _autoApproveKey = 'auto_approve_commands';
   static const _phoneStorageKey = 'phone_storage';
   static const _webPhoneLayoutKey = 'web_phone_layout';
@@ -164,6 +171,7 @@ class SettingsController extends Notifier<AppSettings> {
       ),
       autoStartLocal: prefs.getBool(_autoStartKey) ?? ref.read(performanceDefaultsProvider).autoStartLocal,
       autoStartLocalExplicit: prefs.containsKey(_autoStartKey),
+      retainSshConnections: prefs.getBool(_retainSshKey) ?? false,
       autoApproveCommands: prefs.getBool(_autoApproveKey) ?? false,
       phoneStorage: prefs.getBool(_phoneStorageKey) ?? false,
       webPhoneLayout: prefs.getBool(_webPhoneLayoutKey) ?? true,
@@ -261,6 +269,14 @@ class SettingsController extends Notifier<AppSettings> {
     state = state.copyWith(autoStartLocal: value, autoStartLocalExplicit: true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoStartKey, value);
+  }
+
+  Future<void> setRetainSshConnections(bool value) async {
+    await _loaded;
+    if (!ref.mounted) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_retainSshKey, value);
+    if (ref.mounted) state = state.copyWith(retainSshConnections: value);
   }
 }
 

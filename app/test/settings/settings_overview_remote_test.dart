@@ -11,6 +11,7 @@ import 'package:dsh_app/state/account_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/state/ssh_connection_status.dart';
 import 'package:dsh_app/ui/remote/remote_screen.dart';
 import 'package:dsh_app/ui/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -37,6 +38,7 @@ List<Override> _overrides({
   activeHostProvider.overrideWith(() => FixedActiveHost(host)),
   hostsProvider.overrideWith(FixedHosts.new),
   hostLinkStatusProvider.overrideWith((ref, host) => Stream.value(HostLinkStatus(link))),
+  sshConnectionStatusProvider.overrideWith((ref, host) => Stream.value((status: HostLinkStatus(link), closed: false))),
   // The whole hub opens the host's connection: no network, no keystore.
   networkKicksProvider.overrideWithValue(const Stream.empty()),
   secretStoreProvider.overrideWithValue(MemorySecretStore()),

@@ -5,6 +5,7 @@ import '../../l10n/l10n.dart';
 import '../../runtime/runtime_state.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../../state/ssh_connection_status.dart';
 import '../common/status_dot.dart';
 import '../engine/engine_status.dart';
 import '../theme/app_icons.dart';
@@ -30,6 +31,16 @@ class HostStatusView {
   static HostStatusView ofRelayHost(RelayHost host) => host.online
       ? HostStatusView(StatusTone.ok, appL10n.remoteOnline)
       : HostStatusView(StatusTone.idle, appL10n.remoteOffline);
+
+  static HostStatusView ofSsh(SshConnectionSnapshot snapshot) {
+    final status = snapshot.status;
+    if (status.phase == HostLinkPhase.failed) return ofLink(status);
+    if (snapshot.closed) return HostStatusView(StatusTone.error, appL10n.chatDisconnected);
+    if (status.phase == HostLinkPhase.reconnecting) {
+      return HostStatusView(StatusTone.error, appL10n.remoteReconnecting);
+    }
+    return ofLink(status);
+  }
 }
 
 /// Live status of [host]: the engine for 本机, the link for remote hosts.
@@ -37,6 +48,11 @@ HostStatusView watchHostStatus(WidgetRef ref, HostRef host) {
   if (host.isLocal) {
     final view = EngineStatusView.of(ref.watch(localRuntimeProvider));
     return HostStatusView(view.tone, view.label);
+  }
+  if (host.kind == HostKind.ssh) {
+    final snapshot =
+        ref.watch(sshConnectionStatusProvider(host)).value ?? ref.read(sshConnectionStatusesProvider).snapshot(host);
+    return HostStatusView.ofSsh(snapshot);
   }
   final status = ref.watch(hostLinkStatusProvider(host)).value ?? HostLinkStatus.idle;
   return HostStatusView.ofLink(status);

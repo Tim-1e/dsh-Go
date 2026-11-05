@@ -11,6 +11,7 @@ import 'package:dsh_app/remote/ssh/ssh_link.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/ssh_connection_status.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/ui/remote/host_key_dialog.dart';
 import 'package:dsh_app/ui/remote/host_switcher.dart';
@@ -76,6 +77,7 @@ List<Override> _remote({
   HostRef active = const HostRef.ssh('ssh-test'),
   HostLinkStatus status = _connected,
   RelayBackend? relay,
+  Map<HostRef, SshConnectionSnapshot> snapshots = const {},
 }) => [
   secretStoreProvider.overrideWithValue(MemorySecretStore()),
   networkKicksProvider.overrideWithValue(const Stream.empty()),
@@ -83,6 +85,10 @@ List<Override> _remote({
   activeHostProvider.overrideWith(() => _FakeActive(active)),
   relayBackendProvider.overrideWithValue(relay ?? FakeRelayBackend(user: sampleRelayUser)),
   hostLinkStatusProvider.overrideWith((ref, host) => Stream.value(host == active ? status : HostLinkStatus.idle)),
+  sshConnectionStatusProvider.overrideWith(
+    (ref, host) =>
+        Stream.value(snapshots[host] ?? (status: host == active ? status : HostLinkStatus.idle, closed: false)),
+  ),
   localRuntimeProvider.overrideWith(() => FakeRuntime(const LocalRuntimeState(loaded: true, status: runningStatus))),
 ];
 
@@ -166,6 +172,30 @@ void main() {
   );
 
   goldenBoth('ssh_form_new', () => const SshHostFormPage(), overrides: () => _remote(active: HostRef.local));
+
+  goldenBoth(
+    'host_sheet_retained_statuses',
+    () => const _SheetLauncher(),
+    overrides: () => _remote(
+      hosts: const [
+        sampleSsh,
+        SshHostConfig(id: 'retained', name: '另一台电脑', host: 'another.example.com', user: 'me'),
+        SshHostConfig(id: 'closed', name: '已释放连接', host: 'closed.example.com', user: 'me'),
+        _lab,
+      ],
+      relay: FakeRelayBackend(),
+      snapshots: {
+        const HostRef.ssh('retained'): (status: _connected, closed: false),
+        const HostRef.ssh('closed'): (status: _connected, closed: true),
+      },
+    ),
+    before: (tester) async {
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   goldenBoth(
     'ssh_form_testing',

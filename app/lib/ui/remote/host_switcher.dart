@@ -198,14 +198,9 @@ class _HostRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    // Live state for 本机 and the active remote host; presence for relay
-    // hosts; nothing for idle SSH hosts (connecting just to show a dot
-    // would cost a login).
-    final HostStatusView? view = host.isLocal || active
-        ? watchHostStatus(ref, host)
-        : relay != null
+    final view = host.kind == HostKind.relay && !active && relay != null
         ? HostStatusView.ofRelayHost(relay!)
-        : null;
+        : watchHostStatus(ref, host);
     return Semantics(
       key: ValueKey('host-row-${host.kind.name}-${host.id}'),
       selected: active,
@@ -216,16 +211,14 @@ class _HostRow extends ConsumerWidget {
         title: title,
         subtitle: subtitle,
         onTap: onTap,
-        value: view == null
-            ? null
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedStatusDot(tone: view.tone, size: 7),
-                  const SizedBox(width: 6),
-                  Text(view.label),
-                ],
-              ),
+        value: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedStatusDot(tone: view.tone, size: 7),
+            const SizedBox(width: 6),
+            Text(view.label),
+          ],
+        ),
         trailing: active ? Icon(AppIcons.selected, size: 20, color: scheme.primary) : const SizedBox(width: 20),
       ),
     );

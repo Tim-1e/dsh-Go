@@ -317,8 +317,8 @@ void main() {
       tester,
       SettingsPageId.remote,
       () => _app(tester, const RemoteScreen(), _running()),
-      // Once there is a host to come back to; 直连优先 once signed in to DSH Remote.
-      absent: {'remote-auto-connect', 'remote-direct'},
+      // Connection preferences need a saved host; 直连优先 needs a Remote account.
+      absent: {'remote-auto-connect', 'remote-retain-ssh-connections', 'remote-direct'},
     );
   });
 

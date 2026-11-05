@@ -9,6 +9,7 @@ import 'package:dsh_app/runtime/local_footprint.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
+import 'package:dsh_app/state/ssh_connection_status.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/state/settings_state.dart';
@@ -52,6 +53,9 @@ List<Override> _hostList() => [
   hostsProvider.overrideWith(_Hosts.new),
   activeHostProvider.overrideWith(_Active.new),
   relayBackendProvider.overrideWithValue(FakeRelayBackend()),
+  sshConnectionStatusProvider.overrideWith(
+    (ref, host) => Stream.value((status: const HostLinkStatus(HostLinkPhase.connected), closed: false)),
+  ),
   hostLinkStatusProvider.overrideWith(
     (ref, host) => Stream.value(
       host.isLocal

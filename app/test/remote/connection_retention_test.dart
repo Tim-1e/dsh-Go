@@ -11,9 +11,11 @@ import 'package:dsh_app/state/artifacts.dart';
 import 'package:dsh_app/state/hosts_state.dart';
 import 'package:dsh_app/state/notify_state.dart' show appForegroundProvider;
 import 'package:dsh_app/state/settings_state.dart';
+import 'package:dsh_app/state/ssh_connection_status.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -140,13 +142,16 @@ void main() {
   Future<ProviderContainer> create(
     WidgetTester tester, {
     bool enabled = true,
+    bool storedSettings = false,
     MemorySecretStore? secrets,
     DshClient? client,
     SshHostConfig sshConfig = sampleSsh,
   }) async {
     SharedPreferences.setMockInitialValues({
       HostsController.prefsKey: jsonEncode([sshConfig.toJson(), anotherSsh.toJson()]),
+      if (storedSettings) 'retain_ssh_connections': enabled,
     });
+    if (storedSettings) FlutterSecureStorage.setMockInitialValues({});
     relay = FakeRelayBackend(user: sampleRelayUser);
     ssh = FakeSshServer();
     connector = FakeConnector();
@@ -161,7 +166,7 @@ void main() {
                 }),
           ),
           localConnectionProvider.overrideWith(_NoLocal.new),
-          settingsProvider.overrideWith(() => _Settings(enabled)),
+          if (!storedSettings) settingsProvider.overrideWith(() => _Settings(enabled)),
           networkKicksProvider.overrideWithValue(const Stream.empty()),
           relayBackendProvider.overrideWithValue(relay),
           sshLinkFactoryProvider.overrideWithValue(
@@ -204,6 +209,128 @@ void main() {
     await flush(tester);
     await flush(tester);
   }
+
+  SshConnectionSnapshot snapshot(ProviderContainer c, HostRef host) =>
+      c.read(sshConnectionStatusProvider(host)).requireValue;
+
+  testRetention('passive SSH status subscriptions never connect unselected hosts', (tester) async {
+    final c = await create(tester);
+    final secondHost = HostRef.ssh(anotherSsh.id);
+    for (final host in [sshHost, secondHost]) {
+      c.listen(sshConnectionStatusProvider(host), (_, _) {});
+    }
+    await flush(tester);
+    for (final host in [sshHost, secondHost]) {
+      expect(snapshot(c, host).status.phase, HostLinkPhase.idle);
+      expect(c.exists(hostLinkProvider(host)), isFalse);
+    }
+    expect(ssh.connects, isEmpty);
+    expect(connector.calls, isEmpty);
+  });
+
+  testRetention('passive SSH statuses show inactive live hosts without preventing background expiry', (tester) async {
+    final c = await create(tester);
+    final secondHost = HostRef.ssh(anotherSsh.id);
+    for (final host in [sshHost, secondHost]) {
+      c.listen(sshConnectionStatusProvider(host), (_, _) {});
+      await connect(tester, c, host);
+    }
+    await leave(tester, c);
+    for (final host in [sshHost, secondHost]) {
+      expect(snapshot(c, host).status.phase, HostLinkPhase.connected);
+      expect(snapshot(c, host).closed, isFalse);
+    }
+    c.read(appForegroundProvider.notifier).set(false);
+    await tester.pump(const Duration(minutes: 5));
+    await flush(tester);
+    await flush(tester);
+    for (final host in [sshHost, secondHost]) {
+      expect(snapshot(c, host).closed, isTrue);
+      expect(c.exists(hostLinkProvider(host)), isFalse);
+    }
+    expect(ssh.transports.every((transport) => transport.isClosed), isTrue);
+    expect(ssh.connects, hasLength(2));
+  });
+
+  testRetention('passive SSH status preserves a disposed failure and recovers on a fresh connection', (tester) async {
+    final c = await create(tester);
+    c.listen(sshConnectionStatusProvider(sshHost), (_, _) {});
+    const failure = HostLinkError(HostLinkErrorKind.authFailed, 'Rejected test credentials');
+    ssh.failNext.add(failure);
+    c.read(activeHostProvider.notifier).select(sshHost);
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await flush(tester);
+      if (c.read(sshConnectionStatusProvider(sshHost)).value?.status.phase == HostLinkPhase.failed) break;
+    }
+    expect(snapshot(c, sshHost).status.error, same(failure));
+    await leave(tester, c);
+    expect(snapshot(c, sshHost).status.phase, HostLinkPhase.failed);
+    expect(snapshot(c, sshHost).status.error, same(failure));
+    expect(snapshot(c, sshHost).closed, isTrue);
+    expect(c.exists(hostLinkProvider(sshHost)), isFalse);
+    await connect(tester, c, sshHost);
+    expect(snapshot(c, sshHost).status.phase, HostLinkPhase.connected);
+    expect(snapshot(c, sshHost).status.error, isNull);
+    expect(snapshot(c, sshHost).closed, isFalse);
+    expect(ssh.connects, hasLength(2));
+  });
+
+  testRetention('credential changes close old snapshot before replacement connects', (tester) async {
+    final c = await create(tester);
+    c.listen(sshConnectionStatusProvider(sshHost), (_, _) {});
+    await connect(tester, c, sshHost);
+    final oldTransport = ssh.last;
+    await leave(tester, c);
+    await c.read(hostsProvider.notifier).saveSsh(sampleSsh, secrets: const SshSecrets(password: 'replacement'));
+    await flush(tester);
+    await flush(tester);
+    expect(oldTransport.isClosed, isTrue);
+    expect(snapshot(c, sshHost).closed, isTrue);
+    expect(ssh.connects, hasLength(1));
+    await connect(tester, c, sshHost);
+    final replacement = ssh.last;
+    expect(snapshot(c, sshHost).status.phase, HostLinkPhase.connected);
+    expect(snapshot(c, sshHost).closed, isFalse);
+    expect(replacement.isClosed, isFalse);
+    expect(ssh.connects.last.secrets.password, 'replacement');
+  });
+
+  testRetention('deleting an SSH host prunes its passive snapshot without affecting another host', (tester) async {
+    final c = await create(tester);
+    final secondHost = HostRef.ssh(anotherSsh.id);
+    for (final host in [sshHost, secondHost]) {
+      c.listen(sshConnectionStatusProvider(host), (_, _) {});
+      await connect(tester, c, host);
+    }
+    await c.read(hostsProvider.notifier).removeSsh(sampleSsh.id);
+    await flush(tester);
+    await flush(tester);
+    expect(ssh.transports.first.isClosed, isTrue);
+    expect(snapshot(c, sshHost).status.phase, HostLinkPhase.idle);
+    expect(snapshot(c, sshHost).closed, isFalse);
+    expect(snapshot(c, secondHost).status.phase, HostLinkPhase.connected);
+    expect(snapshot(c, secondHost).closed, isFalse);
+    expect(ssh.last.isClosed, isFalse);
+  });
+
+  testRetention('stored preference drives real settings through SSH and bootstrap reuse', (tester) async {
+    final c = await create(tester, storedSettings: true);
+    final first = await connect(tester, c, sshHost);
+    for (var i = 0; i < 20 && !c.read(settingsProvider).loaded; i++) {
+      await flush(tester);
+    }
+    expect(c.read(settingsProvider).loaded, isTrue);
+    expect(c.read(settingsProvider).retainSshConnections, isTrue);
+    final transport = ssh.last;
+    final bootstrapCalls = transport.scripts.length;
+    await connect(tester, c, HostRef.ssh(anotherSsh.id));
+    final returned = await connect(tester, c, sshHost);
+    expect(returned.client, same(first.client));
+    expect(transport.isClosed, isFalse);
+    expect(transport.scripts.length, bootstrapCalls);
+    expect(ssh.connects, hasLength(2));
+    expect(connector.calls, hasLength(2));
+  });
 
   testRetention('foreground SSH survives a local round trip without connecting another saved host', (tester) async {
     final c = await create(tester);

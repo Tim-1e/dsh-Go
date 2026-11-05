@@ -18,6 +18,7 @@ import 'permission_default_repair.dart';
 import 'provider_backend.dart';
 import 'provider_keys.dart';
 import 'settings_state.dart';
+import 'ssh_connection_status.dart';
 
 /// A connected DSH host: the on-device engine, an SSH host or a relay device.
 class HostConnection {
@@ -193,7 +194,7 @@ final sshLinkFactoryProvider = Provider<SshLinkFactory>(
 );
 
 /// The live link to a remote host; null for 本机 or an unknown host. Kept while
-/// something watches it (the active connection, a status row); closed after.
+/// a connection consumer watches it; SSH status rows observe passive snapshots.
 final hostLinkProvider = Provider.autoDispose.family<HostLink?, HostRef>((ref, host) {
   switch (host.kind) {
     case HostKind.local:
@@ -205,6 +206,7 @@ final hostLinkProvider = Provider.autoDispose.family<HostLink?, HostRef>((ref, h
       if (key == null) return null;
       final config = ref.read(hostsProvider).sshById(host.id)!;
       final link = ref.read(sshLinkFactoryProvider)(ref, config);
+      ref.read(sshConnectionStatusesProvider).observe(ref, host, link);
       // Renames, cwd and re-pinned keys apply in place.
       ref.listen(hostsProvider.select((s) => s.sshById(host.id)), (_, next) {
         if (next != null && next.connectionKey == link.config.connectionKey) link.updateConfig(next);

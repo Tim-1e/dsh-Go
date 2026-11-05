@@ -2,15 +2,19 @@
 // check), relay trust, saving an SSH host, and going back to 本机.
 
 import 'dart:convert';
+import 'dart:async';
 import 'dart:ui' show Tristate;
 
 import 'package:dsh_app/remote/secret_store.dart';
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
+import 'package:dsh_app/state/ssh_connection_status.dart';
 import 'package:dsh_app/ui/remote/host_switcher.dart';
 import 'package:dsh_app/ui/remote/remote_screen.dart';
 import 'package:dsh_app/ui/remote/ssh_host_form.dart';
+import 'package:dsh_app/ui/common/status_chip.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -63,9 +67,9 @@ void main() {
     localRuntimeProvider.overrideWith(() => FakeRuntime(const LocalRuntimeState(loaded: true, status: runningStatus))),
   ];
 
-  Future<ProviderContainer> pump(WidgetTester tester, Widget home) async {
+  Future<ProviderContainer> pump(WidgetTester tester, Widget home, {List<Override> extra = const []}) async {
     usePhoneSurface(tester);
-    await tester.pumpWidget(goldenApp(home: home, brightness: Brightness.light, overrides: overrides()));
+    await tester.pumpWidget(goldenApp(home: home, brightness: Brightness.light, overrides: [...overrides(), ...extra]));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     return ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
@@ -103,10 +107,7 @@ void main() {
     for (final provider in ['GitHub', '知乎', 'Google']) {
       expect(find.widgetWithText(FilledButton, '使用 $provider 登录'), findsOneWidget);
     }
-    expect(
-      tester.getTopLeft(find.text('使用 GitHub 登录')).dy,
-      lessThan(tester.getTopLeft(find.text('使用 知乎 登录')).dy),
-    );
+    expect(tester.getTopLeft(find.text('使用 GitHub 登录')).dy, lessThan(tester.getTopLeft(find.text('使用 知乎 登录')).dy));
     await tester.tap(find.text('使用 GitHub 登录'));
     await tester.pump();
     expect(relay.loginProviderIds, ['github']);
@@ -155,6 +156,83 @@ void main() {
     );
     semantics.dispose();
   });
+
+  testWidgets('host switcher shows never-connected SSH hosts as gray without connecting', (tester) async {
+    await pump(tester, const _Launcher());
+    await openSheet(tester);
+    final row = find.byKey(ValueKey('host-row-ssh-${sampleSsh.id}'));
+    expect(find.descendant(of: row, matching: find.text('未连接')), findsOneWidget);
+    expect(
+      tester.widget<AnimatedStatusDot>(find.descendant(of: row, matching: find.byType(AnimatedStatusDot))).tone,
+      StatusTone.idle,
+    );
+    expect(server.connects, isEmpty);
+  });
+
+  for (final manage in [false, true]) {
+    testWidgets('${manage ? 'management' : 'switcher'} statuses fit a narrow screen with large English text', (
+      tester,
+    ) async {
+      AppLocale.use(AppLocale.en);
+      addTearDown(() => AppLocale.use(AppLocale.zhCN));
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pump(
+        tester,
+        manage ? const RemoteScreen() : const _Launcher(),
+        extra: [
+          sshConnectionStatusProvider.overrideWith(
+            (ref, host) => Stream.value((
+              status: const HostLinkStatus(HostLinkPhase.connecting, step: HostLinkStep.verifyHostKey),
+              closed: false,
+            )),
+          ),
+        ],
+      );
+      tester.view.physicalSize = const Size(640, 1688);
+      await tester.pump();
+      if (!manage) await openSheet(tester);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('${manage ? 'management' : 'switcher'} shows inactive SSH live, closed and failed states', (
+      tester,
+    ) async {
+      final changes = StreamController<SshConnectionSnapshot>.broadcast();
+      addTearDown(changes.close);
+      final c = await pump(
+        tester,
+        manage ? const RemoteScreen() : const _Launcher(),
+        extra: [
+          sshConnectionStatusProvider.overrideWith(
+            (ref, host) =>
+                host.id == sampleSsh.id ? changes.stream : Stream.value((status: HostLinkStatus.idle, closed: false)),
+          ),
+        ],
+      );
+      if (!manage) await openSheet(tester);
+      final row = find.byKey(ValueKey('${manage ? 'ssh-row' : 'host-row-ssh'}-${sampleSsh.id}'));
+      Future<void> check(SshConnectionSnapshot snapshot, StatusTone tone, String label) async {
+        changes.add(snapshot);
+        await frames(tester, 3);
+        expect(find.descendant(of: row, matching: find.text(label)), findsOneWidget);
+        expect(
+          tester.widget<AnimatedStatusDot>(find.descendant(of: row, matching: find.byType(AnimatedStatusDot))).tone,
+          tone,
+        );
+        expect(c.read(activeHostProvider), HostRef.local);
+        expect(tester.widget<Semantics>(row).properties.selected, isFalse);
+        expect(server.connects, isEmpty);
+      }
+
+      const connected = HostLinkStatus(HostLinkPhase.connected);
+      await check((status: connected, closed: false), StatusTone.ok, '已连接');
+      await check((status: connected, closed: true), StatusTone.error, '连接已断开');
+      await check((status: const HostLinkStatus(HostLinkPhase.failed), closed: true), StatusTone.error, '连接失败');
+      await check((status: const HostLinkStatus(HostLinkPhase.reconnecting), closed: false), StatusTone.error, '重新连接中');
+      await check((status: connected, closed: false), StatusTone.ok, '已连接');
+    });
+  }
 
   testWidgets('picking a host with a pinned key switches right away', (tester) async {
     final c = await pump(tester, const _Launcher());

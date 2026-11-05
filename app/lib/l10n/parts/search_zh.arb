@@ -1,5 +1,6 @@
 {
   "searchApiKey": "API Key",
+  "searchKwRetainSsh": "SSH,连接,保留,切换,前台,后台,五分钟",
   "searchNeedsLocal": "连接本机时可用",
   "searchNeedsPhoneControl": "开启手机操控后可用",
   "searchNeedsNativeUi": "原生界面可用",

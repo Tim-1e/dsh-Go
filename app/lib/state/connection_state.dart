@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../l10n/l10n.dart';
 import '../remote/link_status.dart';
@@ -12,10 +13,12 @@ import '../remote/ssh/ssh_transport.dart';
 import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
 import 'hosts_state.dart';
+import 'notify_state.dart' show appForegroundProvider;
 import 'permission_default_repair.dart';
 import 'provider_backend.dart';
 import 'provider_keys.dart';
 import 'settings_state.dart';
+import 'ssh_connection_status.dart';
 
 /// A connected DSH host: the on-device engine, an SSH host or a relay device.
 class HostConnection {
@@ -27,6 +30,7 @@ class HostConnection {
     this.hostId,
     this.name,
     this.workingDirectory,
+    this.keepAlive,
   });
 
   final DshClient client;
@@ -47,6 +51,18 @@ class HostConnection {
   /// Default cwd for new sessions on a remote host (absolute, `~` resolved);
   /// null lets the remote DSH pick.
   final String? workingDirectory;
+
+  /// A transfer holds its originating connection until it settles.
+  final KeepAliveLink? Function()? keepAlive;
+
+  Future<T> whileInUse<T>(Future<T> Function() action) async {
+    final hold = keepAlive?.call();
+    try {
+      return await action();
+    } finally {
+      hold?.close();
+    }
+  }
 }
 
 typedef LocalClientConnector = Future<DshClient> Function({required Uri baseUri, required String token});
@@ -178,7 +194,7 @@ final sshLinkFactoryProvider = Provider<SshLinkFactory>(
 );
 
 /// The live link to a remote host; null for 本机 or an unknown host. Kept while
-/// something watches it (the active connection, a status row); closed after.
+/// a connection consumer watches it; SSH status rows observe passive snapshots.
 final hostLinkProvider = Provider.autoDispose.family<HostLink?, HostRef>((ref, host) {
   switch (host.kind) {
     case HostKind.local:
@@ -190,6 +206,7 @@ final hostLinkProvider = Provider.autoDispose.family<HostLink?, HostRef>((ref, h
       if (key == null) return null;
       final config = ref.read(hostsProvider).sshById(host.id)!;
       final link = ref.read(sshLinkFactoryProvider)(ref, config);
+      ref.read(sshConnectionStatusesProvider).observe(ref, host, link);
       // Renames, cwd and re-pinned keys apply in place.
       ref.listen(hostsProvider.select((s) => s.sshById(host.id)), (_, next) {
         if (next != null && next.connectionKey == link.config.connectionKey) link.updateConfig(next);
@@ -253,6 +270,7 @@ class RemoteConnectionController extends AsyncNotifier<HostConnection?> {
 
   @override
   Future<HostConnection?> build() async {
+    final r = ref;
     final link = ref.watch(hostLinkProvider(host));
     if (link == null) return null;
     var name = ref.read(hostNameProvider(host));
@@ -264,6 +282,7 @@ class RemoteConnectionController extends AsyncNotifier<HostConnection?> {
       kind: host.kind,
       hostId: host.id,
       workingDirectory: link is SshHostLink ? link.resolvedWorkingDirectory : null,
+      keepAlive: () => r.mounted ? r.keepAlive() : null,
     );
 
     ref.listen(hostNameProvider(host), (_, next) {
@@ -299,7 +318,10 @@ class RemoteConnectionController extends AsyncNotifier<HostConnection?> {
       unawaited(clients.cancel());
       unawaited(statuses.cancel());
     });
-    return wrap(await link.open());
+    final client = await link.open();
+    if (!r.mounted) return null;
+    if (host.kind == HostKind.ssh) _retainSshConnection(r, link);
+    return wrap(client);
   }
 
   /// Gives up any backoff and connects again now.
@@ -314,6 +336,50 @@ class RemoteConnectionController extends AsyncNotifier<HostConnection?> {
       link.retry();
     }
   }
+}
+
+/// Keep only a successfully opened connection, never the inactive host's UI.
+void _retainSshConnection(Ref ref, HostLink link) {
+  KeepAliveLink? hold;
+  Timer? expiry;
+  var expired = false;
+  var enabled = ref.read(settingsProvider).retainSshConnections;
+  void update() {
+    final failed = link.status.phase == HostLinkPhase.failed;
+    if (enabled && !expired && !failed) {
+      hold ??= ref.keepAlive();
+    } else {
+      hold?.close();
+      hold = null;
+    }
+  }
+
+  void foreground(bool value) {
+    expiry?.cancel();
+    expired = false;
+    if (!value) {
+      expiry = Timer(const Duration(minutes: 5), () {
+        expired = true;
+        update();
+      });
+    }
+    update();
+  }
+
+  ref.listen(settingsProvider.select((s) => s.retainSshConnections), (_, next) {
+    enabled = next;
+    update();
+  });
+  ref.listen(appForegroundProvider, (_, next) => foreground(next));
+  final statuses = link.statuses.listen((status) {
+    // close() emits idle synchronously while the owning provider is disposing.
+    if (status.phase != HostLinkPhase.idle && ref.mounted) update();
+  });
+  ref.onDispose(() {
+    expiry?.cancel();
+    unawaited(statuses.cancel());
+  });
+  foreground(ref.read(appForegroundProvider));
 }
 
 final remoteConnectionProvider = AsyncNotifierProvider.autoDispose

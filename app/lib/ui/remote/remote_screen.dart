@@ -11,6 +11,7 @@ import '../../runtime/runtime_state.dart';
 import '../../state/app_info.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../../state/settings_state.dart';
 import '../common/app_dialog.dart';
 import '../common/ask_ai.dart';
 import '../common/overview_card.dart';
@@ -132,7 +133,7 @@ class RemoteScreen extends ConsumerWidget {
         // Only meaningful once there is a host to come back to.
         if (ssh.isNotEmpty || signedIn)
           SettingsSection(
-            title: l10n.remoteStartupSection,
+            title: l10n.remoteConnectionSection,
             children: [
               SettingsSwitchTile(
                 key: const ValueKey('remote-auto-connect'),
@@ -140,6 +141,13 @@ class RemoteScreen extends ConsumerWidget {
                 subtitle: l10n.remoteAutoConnectOnStartupHint,
                 value: ref.watch(remoteAutoConnectProvider),
                 onChanged: (value) => unawaited(ref.read(remoteAutoConnectProvider.notifier).set(value)),
+              ),
+              SettingsSwitchTile(
+                key: const ValueKey('remote-retain-ssh-connections'),
+                spot: Spots.retainSshConnections,
+                subtitle: l10n.remoteRetainConnectionsHint,
+                value: ref.watch(settingsProvider.select((s) => s.retainSshConnections)),
+                onChanged: (value) => unawaited(ref.read(settingsProvider.notifier).setRetainSshConnections(value)),
               ),
             ],
           ),
@@ -160,7 +168,7 @@ class _ActiveCard extends ConsumerWidget {
     final l10n = context.l10n;
     if (active.isLocal) return const SizedBox.shrink();
     final status = ref.watch(hostLinkStatusProvider(active)).value ?? HostLinkStatus.idle;
-    final view = HostStatusView.ofLink(status);
+    final view = watchHostStatus(ref, active);
     final name = ref.watch(hostNameProvider(active)) ?? l10n.commonRemoteHost;
     final ssh = active.kind == HostKind.ssh ? ref.watch(hostsProvider).sshById(active.id) : null;
     final error = status.error;
@@ -260,13 +268,16 @@ class _HostState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedStatusDot(tone: view.tone, size: 7),
-        const SizedBox(width: 6),
-        Text(view.label),
-      ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedStatusDot(tone: view.tone, size: 7),
+          const SizedBox(width: 6),
+          Flexible(child: Text(view.label, maxLines: 2, overflow: TextOverflow.ellipsis)),
+        ],
+      ),
     );
   }
 }
@@ -339,8 +350,9 @@ class _SshRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final view = active ? watchHostStatus(ref, HostRef.ssh(config.id)) : null;
+    final view = watchHostStatus(ref, HostRef.ssh(config.id));
     return Semantics(
+      key: ValueKey('ssh-row-${config.id}'),
       selected: active,
       inMutuallyExclusiveGroup: true,
       child: SettingsTile(
@@ -349,7 +361,7 @@ class _SshRow extends ConsumerWidget {
         title: config.name,
         subtitle: config.address,
         onTap: onTap,
-        value: view == null ? null : _HostState(view),
+        value: _HostState(view),
         trailing: _EdgeIconButton(
           icon: const Icon(AppIcons.configure, size: 20),
           tooltip: l10n.commonEdit,

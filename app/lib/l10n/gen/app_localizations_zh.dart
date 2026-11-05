@@ -12053,7 +12053,13 @@ class L10nZh extends L10n {
   String get readListFailed => '未更新 · 上次结果';
 
   @override
-  String get remoteStartupSection => '启动';
+  String get remoteConnectionSection => '连接';
+
+  @override
+  String get remoteRetainConnections => '切换主机时保持 SSH 连接';
+
+  @override
+  String get remoteRetainConnectionsHint => 'App 在前台时保留已连接的 SSH 主机；进入后台 5 分钟后断开未使用的连接，正在进行的文件传输会先完成。';
 
   @override
   String get remoteAutoConnectOnStartup => '连接上次使用的主机';
@@ -13611,6 +13617,9 @@ class L10nZh extends L10n {
 
   @override
   String get searchApiKey => 'API Key';
+
+  @override
+  String get searchKwRetainSsh => 'SSH,连接,保留,切换,前台,后台,五分钟';
 
   @override
   String get searchNeedsLocal => '连接本机时可用';

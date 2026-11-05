@@ -93,6 +93,10 @@ class ArtifactFiles {
   Future<File> officePdf(String sessionId, Artifact artifact) async {
     final conn = connection;
     if (conn == null) throw const ArtifactError('offline');
+    return conn.whileInUse(() => _officePdf(sessionId, artifact, conn));
+  }
+
+  Future<File> _officePdf(String sessionId, Artifact artifact, HostConnection conn) async {
     if (!canConvertOffice) throw const ArtifactError('unsupported');
     final client = conn.client;
     final stat = await client.statFile(sessionId, artifact.path);
@@ -122,6 +126,16 @@ class ArtifactFiles {
   }) async {
     final conn = connection;
     if (conn == null) throw const ArtifactError('offline');
+    return conn.whileInUse(() => _materialize(sessionId, artifact, conn, onProgress, maxBytes));
+  }
+
+  Future<File> _materialize(
+    String sessionId,
+    Artifact artifact,
+    HostConnection conn,
+    void Function(double?)? onProgress,
+    int maxBytes,
+  ) async {
     if (conn.isLocal) {
       final host = await channel.resolveGuest(artifact.path);
       if (host == null) throw const ArtifactError('missing');
@@ -213,6 +227,10 @@ class ArtifactFiles {
     }
     final conn = connection;
     if (conn == null) return null;
+    return conn.whileInUse(() => _thumbnail(sessionId, artifact, conn));
+  }
+
+  Future<ImageProvider?> _thumbnail(String sessionId, Artifact artifact, HostConnection conn) async {
     if (!conn.isLocal) {
       final stat = await conn.client.statFile(sessionId, artifact.path);
       if ((stat.bytes ?? maxThumbnailBytes + 1) > maxThumbnailBytes) {

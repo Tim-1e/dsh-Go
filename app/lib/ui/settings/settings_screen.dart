@@ -420,7 +420,7 @@ class _SettingsOverviewState extends ConsumerState<SettingsOverview> {
         title = l10n.hubSettingsAccount;
         subtitle = l10n.hubSettingsSigningIn;
       case _ when remoteOnly:
-        final link = HostStatusView.ofLink(ref.watch(hostLinkStatusProvider(active)).value ?? HostLinkStatus.idle);
+        final link = watchHostStatus(ref, active);
         leading = OverviewGlyph(hostKindIcon(active.kind), tint: hostKindTint(active.kind));
         title = ref.watch(hostNameProvider(active)) ?? l10n.commonRemoteHost;
         subtitle = [l10n.commonRemoteHost, link.label].join(' · ');

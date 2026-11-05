@@ -1,5 +1,6 @@
 {
   "searchApiKey": "API Key",
+  "searchKwRetainSsh": "SSH,connection,retain,switch,foreground,background,five minutes",
   "searchNeedsLocal": "Available on this phone's engine",
   "searchNeedsPhoneControl": "Available once phone control is on",
   "searchNeedsNativeUi": "Available in the native interface",
